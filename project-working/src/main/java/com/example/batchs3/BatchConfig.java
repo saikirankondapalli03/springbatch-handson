@@ -4,6 +4,7 @@ import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.JobExecutionListener;
 import org.springframework.batch.core.Step;
+import org.springframework.batch.core.StepExecutionListener;
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.batch.core.job.builder.JobBuilder;
@@ -39,10 +40,12 @@ public class BatchConfig {
     @Bean
     public Step s3FileStep(JobRepository jobRepository,
                            PlatformTransactionManager transactionManager,
-                           Tasklet s3CopyTasklet) {
+                           Tasklet s3CopyTasklet,
+                           StepExecutionListener stepStatusListener) {
 
         return new StepBuilder("s3FileStep", jobRepository)
                 .tasklet(s3CopyTasklet, transactionManager)
+                .listener(stepStatusListener)
                 .build();
     }
 
