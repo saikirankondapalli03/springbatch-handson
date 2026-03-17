@@ -1,6 +1,7 @@
 package com.example.batchs3;
 
 import org.springframework.batch.core.Job;
+import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.batch.core.configuration.annotation.JobScope;
@@ -8,9 +9,9 @@ import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
-import org.springframework.batch.item.ItemProcessor;
+import org.springframework.batch.core.step.tasklet.Tasklet;
+import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.batch.item.ItemReader;
-import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.file.FlatFileItemReader;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -32,18 +33,12 @@ public class BatchConfig {
     }
 
     @Bean
-    @JobScope
     public Step s3FileStep(JobRepository jobRepository,
                            PlatformTransactionManager transactionManager,
-                           ItemReader<String> lineReader,
-                           ItemProcessor<String, String> lineProcessor,
-                           ItemWriter<String> s3ArchiveWriter) {
+                           Tasklet s3CopyTasklet) {
 
         return new StepBuilder("s3FileStep", jobRepository)
-                .<String, String>chunk(5000, transactionManager)
-                .reader(lineReader)
-                .processor(lineProcessor)
-                .writer(s3ArchiveWriter)
+                .tasklet(s3CopyTasklet, transactionManager)
                 .build();
     }
 
@@ -69,25 +64,31 @@ public class BatchConfig {
     }
 
     @Bean
-    public ItemProcessor<String, String> lineProcessor() {
-        return item -> item;
-    }
-
-    @Bean
     @JobScope
-    public ItemWriter<String> s3ArchiveWriter(
+    public Tasklet s3CopyTasklet(
+            ItemReader<String> lineReader,
             @Value("#{jobParameters['bucketName']}") String bucketName,
             @Value("#{jobParameters['objectKey']}") String objectKey,
             S3LineWriterFactory s3LineWriterFactory) {
 
         String archiveKey = "archive/" + objectKey;
-        return items -> {
+        return (contribution, chunkContext) -> {
+            long processed = 0L;
             try (S3LineWriterFactory.S3LineWriter writer =
                          s3LineWriterFactory.create(bucketName, archiveKey)) {
-                for (String line : items) {
+                String line;
+                while ((line = lineReader.read()) != null) {
                     writer.writeLine(line);
+                    processed++;
                 }
+            } catch (Exception e) {
+                contribution.setExitStatus(new ExitStatus("FAILED_S3_COPY", e.getMessage()));
+                throw e;
             }
+
+            contribution.setExitStatus(new ExitStatus("COMPLETED_S3_COPY",
+                    "linesProcessed=" + processed));
+            return RepeatStatus.FINISHED;
         };
     }
 }
