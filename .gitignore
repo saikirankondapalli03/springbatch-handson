@@ -1,0 +1,14 @@
+# Ignore compiled class files
+*.class
+
+# Ignore Maven/Gradle build output directories
+target/
+build/
+
+# Ignore IDE project files (optional, but usually helpful)
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+
