@@ -1,7 +1,8 @@
 package com.example.batchs3;
 
-import org.springframework.batch.core.Job;
 import org.springframework.batch.core.ExitStatus;
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.JobExecutionListener;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.batch.core.configuration.annotation.JobScope;
@@ -25,9 +26,12 @@ import org.springframework.transaction.PlatformTransactionManager;
 public class BatchConfig {
 
     @Bean
-    public Job s3FileJob(JobRepository jobRepository, Step s3FileStep) {
+    public Job s3FileJob(JobRepository jobRepository,
+                         Step s3FileStep,
+                         JobExecutionListener jobStatusListener) {
         return new JobBuilder("s3FileJob", jobRepository)
                 .incrementer(new RunIdIncrementer())
+                .listener(jobStatusListener)
                 .start(s3FileStep)
                 .build();
     }
