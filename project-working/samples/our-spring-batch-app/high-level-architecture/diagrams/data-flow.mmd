@@ -1,0 +1,14 @@
+%% View 2 — Logical data flow (draw.io)
+flowchart LR
+  S3[(S3 object)]
+  DCE[DATA_CONNECT_LOAD_EVENT]
+  META[(Spring Batch BATCH_*)]
+  RED[RECORD_EXECUTION_DATA]
+  DP[DATA_PERSISTENCE]
+  VR[VALIDATION_RULES / LIST_OF_VALUES]
+
+  S3 --> DCE
+  DCE --> META
+  META --> RED
+  RED --> DP
+  VR -.-> RED

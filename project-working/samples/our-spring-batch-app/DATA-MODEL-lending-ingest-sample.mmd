@@ -1,0 +1,65 @@
+%% Lending ingest - sample file run (single diagram for Mermaid Chart / mermaid.ai)
+%% File: lending-10rows-mixed-errors.psv | consolidated-lending-ingest-sample-data.md
+%% ER diagram: DATA-MODEL-lending-ingest.mmd
+
+flowchart TB
+  subgraph meta["Metadata pre-loaded"]
+    direction TB
+    sr["SOURCE_REGISTRY: SRC-PARTNER-01 Synthetic Example Source ACTIVE"]
+    sch["SOURCE_SCHEDULE: SCH-DAILY-01 Daily 02:00 UTC"]
+    fd["FEEDS: FEED-LENDING-01 pattern lending*.psv delimiter pipe"]
+  end
+
+  subgraph s3block["S3 object"]
+    s3k["s3://ingest-bucket/input/lending-10rows-mixed-errors.psv"]
+  end
+
+  subgraph dce["DATA_CONNECT_LOAD_EVENT one row"]
+    dce1["load_event_id DCE-60001 job_execution_id 20001 feed FEED-LENDING-01 status COMPLETED_WITH_ERRORS"]
+  end
+
+  subgraph sb_meta["Spring Batch sample ids"]
+    direction TB
+    ji["BATCH_JOB_INSTANCE 10001 job ingestLendingFileJob"]
+    je["BATCH_JOB_EXECUTION 20001 STATUS COMPLETED"]
+    jp["BATCH_JOB_EXECUTION_PARAMS: loadEventId s3Uri feedId"]
+    st["BATCH_STEP_EXECUTION: 201 parse 202 validate 203 persist READ 10 WRITE 7"]
+  end
+
+  subgraph chunk["Logical chunks chunk_id"]
+    ch1["CHK-201 lines 1-5 job 20001"]
+    ch2["CHK-202 lines 6-10 job 20001"]
+  end
+
+  subgraph red["RECORD_EXECUTION_DATA 10 rows excerpts"]
+    direction TB
+    rv["VALID: REC-501 L-3001 REC-502 REC-510 etc"]
+    ri["INVALID L-3003 VAL_NUMERIC VR-AMT"]
+    ri2["INVALID L-3008 VAL_LOV VR-CCY JPY"]
+    ri3["INVALID L-3009 VAL_RANGE VR-AMT-GT0"]
+  end
+
+  subgraph dp["DATA_PERSISTENCE 7 rows VALID excerpts"]
+    direction TB
+    dp1["DP-601 L-3001 125000.00 USD REC-501"]
+    dp2["DP-606 L-3007 15000.00 GBP REC-507"]
+    dp3["DP-602 through DP-605 DP-607 seven total"]
+  end
+
+  subgraph lov["LIST_OF_VALUES"]
+    lov1["LOV-CCY-01 USD,EUR,GBP"]
+  end
+
+  sr --> fd
+  sch --> fd
+  s3k --> dce1
+  fd --> dce1
+  ji --> je
+  je --> dce1
+  je --> jp
+  je --> st
+  je --> ch1
+  je --> ch2
+  st --> rv
+  rv --> dp1
+  lov1 -.-> ri2

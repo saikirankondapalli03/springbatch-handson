@@ -1,0 +1,119 @@
+%% Lending ingest - entity relationship (single diagram for Mermaid Chart / mermaid.ai)
+%% Paste this entire file into https://mermaid.ai/ or https://mermaid.live
+%% Sample run diagram: DATA-MODEL-lending-ingest-sample.mmd
+
+erDiagram
+  SOURCE_REGISTRY {
+    varchar src_id PK
+    varchar src_name
+    varchar status
+  }
+
+  SOURCE_SCHEDULE {
+    varchar schedule_id PK
+    varchar src_id FK
+    varchar cron_or_desc
+  }
+
+  FEEDS {
+    varchar feed_id PK
+    varchar feed_name
+    varchar src_id FK
+    varchar schedule_id FK
+    varchar file_pattern
+    varchar delimiter
+  }
+
+  DATA_CONNECT_LOAD_EVENT {
+    bigint load_event_id PK
+    bigint job_execution_id FK
+    varchar feed_id FK
+    text s3_key
+    varchar status
+    timestamp created_at
+  }
+
+  BATCH_JOB_INSTANCE {
+    bigint job_instance_id PK
+    varchar job_name
+    varchar job_key
+  }
+
+  BATCH_JOB_EXECUTION {
+    bigint job_execution_id PK
+    bigint job_instance_id FK
+    varchar status
+    varchar exit_code
+    timestamp start_time
+    timestamp end_time
+  }
+
+  BATCH_JOB_EXECUTION_PARAMS {
+    bigint job_execution_id FK
+    varchar parameter_name
+    varchar parameter_type
+    text parameter_value
+    string identifying_flag
+  }
+
+  BATCH_STEP_EXECUTION {
+    bigint step_execution_id PK
+    bigint job_execution_id FK
+    varchar step_name
+    bigint read_count
+    bigint write_count
+    bigint commit_count
+  }
+
+  VALIDATION_RULES {
+    varchar rule_id PK
+    varchar name
+    varchar expression
+  }
+
+  RECORD_EXECUTION_DATA {
+    bigint rec_id PK
+    bigint job_execution_id FK
+    int line_no
+    varchar chunk_id
+    varchar loan_id
+    varchar record_status
+    varchar error_code
+    varchar failed_rule_id FK
+    text reason
+  }
+
+  DATA_PERSISTENCE {
+    bigint persistence_id PK
+    bigint load_event_id FK
+    bigint job_execution_id FK
+    varchar loan_id
+    numeric amount
+    string currency_code
+    bigint rec_id FK
+  }
+
+  CHUNK_MANIFEST {
+    bigint chunk_manifest_id PK
+    bigint job_execution_id FK
+    varchar chunk_id
+    int line_from
+    int line_to
+    varchar status
+  }
+
+  SOURCE_REGISTRY ||--o{ SOURCE_SCHEDULE : src_id
+  SOURCE_REGISTRY ||--o{ FEEDS : src_id
+  SOURCE_SCHEDULE ||--o{ FEEDS : schedule_id
+  FEEDS ||--o{ DATA_CONNECT_LOAD_EVENT : feed_id
+
+  BATCH_JOB_INSTANCE ||--o{ BATCH_JOB_EXECUTION : job_instance_id
+  BATCH_JOB_EXECUTION ||--o| DATA_CONNECT_LOAD_EVENT : job_execution_id
+  BATCH_JOB_EXECUTION ||--o{ BATCH_JOB_EXECUTION_PARAMS : job_execution_id
+  BATCH_JOB_EXECUTION ||--o{ BATCH_STEP_EXECUTION : job_execution_id
+  BATCH_JOB_EXECUTION ||--o{ RECORD_EXECUTION_DATA : job_execution_id
+  BATCH_JOB_EXECUTION ||--o{ CHUNK_MANIFEST : job_execution_id
+
+  DATA_CONNECT_LOAD_EVENT ||--o{ DATA_PERSISTENCE : load_event_id
+  RECORD_EXECUTION_DATA ||--o| DATA_PERSISTENCE : rec_id
+  RECORD_EXECUTION_DATA }o--o| VALIDATION_RULES : failed_rule_id

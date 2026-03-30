@@ -1,0 +1,29 @@
+%% View 1 — Deployment / infrastructure (draw.io)
+flowchart TB
+  subgraph orchestration["Orchestration (enterprise)"]
+    CM[Control-M]
+  end
+
+  subgraph aws["AWS"]
+    S3[(S3 ingest bucket)]
+    EB[EventBridge optional]
+    Batch[AWS Batch]
+    ECS[ECS compute plane]
+    CW[CloudWatch]
+    SM[Secrets Manager / IAM]
+  end
+
+  subgraph data["Data"]
+    PG[(PostgreSQL)]
+  end
+
+  CM -->|"submit job + params"| Batch
+  CM --> Knob["Concurrency knob: max N overlapping jobs"]
+  Knob -.-> Batch
+  S3 -->|"file present"| EB
+  EB -.->|"optional: signal only; admission still gates"| Batch
+  Batch --> ECS
+  ECS -->|"Spring Batch app"| PG
+  ECS --> S3
+  ECS --> CW
+  ECS --> SM

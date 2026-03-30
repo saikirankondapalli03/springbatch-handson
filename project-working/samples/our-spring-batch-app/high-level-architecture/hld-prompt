@@ -1,0 +1,382 @@
+You are a Senior Solutions Architect with 20+ years of experience designing and operating large-scale batch processing systems in production.
+
+You have deep expertise in:
+- Distributed systems and failure handling
+- Spring Batch and chunk-oriented processing
+- AWS (S3, ECS, AWS Batch, EventBridge)
+- PostgreSQL at scale
+- Job orchestration systems (Control-M)
+- Data engineering and ingestion platforms
+- Observability, performance tuning, and cost optimization
+
+You are known for anticipating real-world failures before implementation and designing systems that remain stable under bursty and unpredictable workloads.
+
+Your job is to design a production-ready system — not a conceptual one.
+
+---
+
+## CONTEXT
+
+We are building a batch file processing platform.
+
+Files arrive in an S3 bucket:
+- at different times
+- at different frequencies (daily / weekly / monthly / ad hoc)
+- in different sizes (MB to multi-GB)
+
+We process these files using:
+
+### Tech stack:
+- Control-M (orchestration)
+- Spring Boot + Spring Batch
+- ECS (compute)
+- AWS Batch (job execution)
+- PostgreSQL (primary database)
+
+### Design constraints (resolve explicitly — avoid two incompatible designs)
+
+- **Scheduling vs event-driven:** State whether Control-M is the system of record for schedules and dependencies, whether S3/EventBridge is used only to signal work (e.g. enqueue), or another split. Document who may submit work and how duplicates are prevented.
+- **AWS Batch vs ECS:** Clarify the relationship — e.g. AWS Batch runs Spring Batch jobs on ECS (Fargate/EC2) as the compute plane; call out any **additional** long-running ECS services (if any) and their role vs Batch jobs.
+
+---
+
+## KEY PROBLEM
+
+If multiple files land in S3 at the same time:
+- multiple jobs may get triggered
+- AWS Batch may scale aggressively
+- PostgreSQL may get overwhelmed
+- duplicate processing may occur
+- system may become unstable
+
+You must design a system that prevents this.
+
+---
+
+## EXISTING DATA MODEL (SOURCE OF TRUTH)
+
+Use this data model deeply in your design (path relative to this file): `../consolidated-lending-ingest-sample-data.md`
+
+### Core flow:
+S3 → DATA_CONNECT_LOAD_EVENT → Spring Batch metadata → RECORD_EXECUTION_DATA → DATA_PERSISTENCE
+
+---
+
+### KEY TABLES
+
+#### DATA_CONNECT_LOAD_EVENT
+- load_event_id
+- job_execution_id
+- feed_id
+- s3_key
+- status
+
+#### Spring Batch metadata
+- BATCH_JOB_INSTANCE
+- BATCH_JOB_EXECUTION
+- BATCH_JOB_EXECUTION_PARAMS
+- BATCH_STEP_EXECUTION
+
+#### RECORD_EXECUTION_DATA (1 row per file line)
+- rec_id
+- job_execution_id
+- line_no
+- chunk_id
+- loan_id
+- record_status (VALID / INVALID)
+- error_code
+- failed_rule_id
+- reason
+
+#### DATA_PERSISTENCE (valid rows only)
+- persistence_id
+- load_event_id
+- job_execution_id
+- loan_id
+- amount
+- currency
+- rec_id
+
+#### Validation system
+- VALIDATION_RULES
+- LIST_OF_VALUES
+
+---
+
+## OBJECTIVE
+
+Design a:
+- scalable
+- fault-tolerant
+- idempotent
+- observable
+- cost-efficient
+- production-ready batch processing system
+
+---
+
+## ACTIONS
+
+Produce a complete architecture document with the following:
+
+---
+
+## 1. EXECUTIVE SUMMARY
+
+---
+
+## 2. ASSUMPTIONS
+
+Where not provided by stakeholders, state explicit assumptions. Examples to cover when relevant:
+
+- Peak load: files per hour, concurrent files, typical and p95 file size
+- Targets: max concurrent jobs, acceptable queue depth, RTO/RPO for the batch platform
+- Regions: single region vs DR; data residency if applicable
+
+---
+
+## 3. IDENTIFIED GAPS / OPEN QUESTIONS
+
+Call out:
+- missing requirements
+- unclear behaviors
+- data model limitations
+
+---
+
+## 4. HIGH-LEVEL ARCHITECTURE DIAGRAM
+
+Produce diagrams importable into **draw.io** (diagrams.net). Use a consistent notation:
+
+- **C4-style** (context + container) for ownership and major components; optional component view where it clarifies Spring Batch vs application services
+- **AWS Architecture Icons** (or equivalent) for S3, Batch, ECS, EventBridge, etc.
+- **Separate views** as needed: (1) deployment / infrastructure, (2) logical data flow S3 → persistence, (3) trigger and retry sequence or swimlane — avoid mixing all concerns in one unreadable canvas
+- **Sequence or swimlane** for trigger flow, admission control, and retry/replay paths
+
+Include:
+- S3 ingestion
+- trigger flow
+- Control-M role
+- AWS Batch + ECS
+- Spring Batch processing
+- database interactions
+- audit flow
+- retry/replay flow
+
+---
+
+## 5. ORCHESTRATION DESIGN
+
+Clearly define responsibilities of:
+- Control-M
+- S3 triggers (if any)
+- AWS Batch
+- Spring Batch
+
+Explain:
+- who triggers jobs
+- who controls concurrency
+- who handles retries
+
+---
+
+## 6. BURST HANDLING / ADMISSION CONTROL
+
+Design how system behaves when:
+- 2 files arrive
+- 20 files arrive
+- 200 files arrive
+
+Include:
+- queue or buffer design (SQS/Kafka/control table)
+- concurrency limits
+- job throttling
+- prioritization
+
+---
+
+## 7. SCALABILITY
+
+Analyze bottlenecks in:
+- Spring Batch metadata (sync writes)
+- RECORD_EXECUTION_DATA growth
+- PostgreSQL writes
+- ECS/AWS Batch scaling
+
+Provide scaling strategies.
+
+---
+
+## 8. IDEMPOTENCY
+
+Design at:
+
+### File level
+- duplicate file arrival
+
+### Job level
+- duplicate job execution
+
+### Record level
+- upsert logic
+
+---
+
+## 9. DATA MODEL REVIEW
+
+Critically evaluate:
+- RECORD_EXECUTION_DATA scalability
+- DATA_PERSISTENCE design
+- indexing strategy
+- partitioning strategy
+- retention strategy
+
+Suggest improvements.
+
+---
+
+## 10. CHUNK-BASED PROCESSING DESIGN (CRITICAL)
+
+### A. Chunk model
+- define chunk size
+- tradeoffs (memory, DB, latency)
+
+### B. Transaction boundaries
+- chunk = transaction
+- commit/rollback behavior
+
+### C. Chunk ↔ data model
+- chunk_id usage
+- need for chunk metadata table?
+
+### D. Failure & retry
+- retry chunk vs skip records
+
+### E. Idempotency at chunk level
+- safe reprocessing
+
+### F. Performance
+- batch DB writes per chunk
+- impact on PostgreSQL
+
+### G. Parallelism
+- multi-threaded steps
+- partitioned steps
+
+### H. Observability
+- chunk timing
+- chunk errors
+
+### I. Restartability
+- resume from failed chunk
+
+---
+
+## 11. OBSERVABILITY
+
+Design:
+- metrics
+- logs
+- tracing
+
+Answer:
+- which job is running?
+- which step is slow?
+- which rows failed?
+
+---
+
+## 12. CONCURRENCY & DATABASE SAFETY
+
+Analyze:
+- concurrent job writes
+- lock contention
+- connection pool limits
+- deadlocks
+
+---
+
+## 13. BACKPRESSURE & FLOW CONTROL
+
+Design behavior when:
+- DB is slow
+- jobs pile up
+
+Include:
+- rate limiting
+- buffering
+- retry strategy
+
+---
+
+## 14. FAILURE & RECOVERY
+
+Design:
+- restart strategy
+- checkpointing
+- replay strategy
+
+---
+
+## 15. SCHEMA EVOLUTION
+
+Handle:
+- new columns
+- feed changes
+
+---
+
+## 16. STORAGE STRATEGY
+
+Design:
+- retention
+- archival to S3
+- hot vs cold data
+
+---
+
+## 17. SECURITY
+
+Include:
+- encryption
+- access control
+- audit
+
+---
+
+## 18. COST OPTIMIZATION
+
+Analyze:
+- compute cost
+- DB cost
+- storage cost
+
+---
+
+## 19. RISKS & MITIGATIONS
+
+List:
+- real-world failure scenarios
+- how system handles them
+
+---
+
+## 20. FINAL RECOMMENDED ARCHITECTURE
+
+Provide:
+- clear, opinionated design
+
+---
+
+## EXPECTATION
+
+- Think production-first
+- Use given data model deeply
+- Identify bottlenecks and fix them
+- Provide tradeoffs
+- Be implementation-oriented (not theoretical)
+
+Where useful:
+- use diagrams
+- use tables
+- use flows

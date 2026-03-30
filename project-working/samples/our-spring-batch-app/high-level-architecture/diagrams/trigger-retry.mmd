@@ -1,0 +1,27 @@
+%% View 3 — Trigger, admission, retry (draw.io swimlane / sequence)
+sequenceDiagram
+  participant CM as Control-M
+  participant AC as Admission / concurrency gate
+  participant Batch as AWS Batch
+  participant Job as Spring Batch job
+  participant PG as PostgreSQL
+
+  CM->>AC: Request run (feed, s3 key, load_event_id)
+  alt At global concurrency limit
+    AC-->>CM: Defer / queue / fail fast per policy
+  else Slot available
+    AC->>Batch: Submit job
+    Batch->>Job: Start container
+    Job->>PG: Begin load_event + BATCH metadata
+    Job->>PG: Chunk writes RECORD + PERSISTENCE
+    alt Success
+      Job->>PG: Terminal status COMPLETED*
+      Job-->>Batch: Exit 0
+    else Retryable failure
+      Job->>PG: Mark FAILED / leave chunk state
+      Batch-->>CM: Retry per policy (Batch + Control-M)
+    else Replay
+      CM->>AC: New run with new job params / run id
+      AC->>Batch: Submit (idempotent keys prevent dup business writes)
+    end
+  end
